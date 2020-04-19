@@ -1,0 +1,25 @@
+Metadata-Version: 1.1
+Name: majka
+Version: 0.8
+Summary: Wrapper for Majka morphological analyser
+Home-page: https://github.com/petrpulc/python-majka
+Author: Petr Pulc
+Author-email: petrpulc@gmail.com
+License: UNKNOWN
+Description: 
+        Native cPython binding to a C++ implementation of morphological analyser named Majka.
+        
+        Tags returned from the analyser are also transcribed into a native Python dictionary
+        to enable a much more Python-like experience without a need to study the documentation.
+        
+        Based on code of Pavel Smerk and Pavel Rychly, NLP group at MUNI, Czech Republic.
+        
+        Morphological automatons are distributed separately under different licences.
+        See http://nlp.fi.muni.cz/ma/
+Platform: UNKNOWN
+Classifier: Environment :: Plugins
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: GNU General Public License v2 (GPLv2)
+Classifier: Programming Language :: C++
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Text Processing :: Linguistic
