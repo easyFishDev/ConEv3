@@ -1,25 +1,91 @@
 import psycopg2
 import os
+import re
+import sys
 import majka
 import json
+import time
 
 morph = majka.Majka('/home/jhu/Downloads/majka.w-lt')
 
 db_connection = psycopg2.connect("dbname=ConEv user=postgres password=forward host=127.0.0.1")
 db = db_connection.cursor()
 
-def log(action, description, severity):
+
+def find_word_attrs(word):
+    morph.flags |= majka.ADD_DIACRITICS  # find word forms with diacritics
+    morph.flags |= majka.DISALLOW_LOWERCASE  # do not enable to find lowercase variants
+    morph.flags |= majka.IGNORE_CASE  # ignore the word case whatsoever
+    morph.flags = 0  # unset all flags
+
+    morph.tags = False  # return just the lemma, do not process the tags
+    morph.tags = True  # turn tag processing back on (default)
+
+    morph.compact_tag = True  # return tag in compact form (as returned by Majka)
+    morph.compact_tag = False  # do not return compact tag (default)
+
+    morph.first_only = True  # return only the first entry
+    morph.first_only = False  # return all entries (default)
+
+    # parsed=json.loads(str(morph.find('uliční')))
+    # print(json.dumps(parsed, indent=4, sort_keys=True))
+    a = morph.find(word)
+    pos=""
+    gender=""
+    animate=""
+    singular=""
+    negation=""
+    plural=""
+    degree=""
+
+    try:
+        pos = (a[0]['tags']['pos'])
+    except:
+        pass
+
+    try:
+        gender = (a[0]['tags']['gender'])
+    except:
+        pass
+
+    try:
+        animate = (a[0]['tags']['animate'])
+    except:
+        pass
+
+    try:
+        singular = (a[0]['tags']['singular'])
+    except:
+        pass
+    try:
+        negation = (a[0]['tags']['negation'])
+    except:
+        pass
+    try:
+        plural = (a[0]['tags']['plural'])
+    except:
+        pass
+    try:
+        degree = (a[0]['tags']['degree'])
+    except:
+        pass
+
+    return pos, gender, animate, singular, negation, plural, degree
+
+def log(action, description, severity, filename):
     # to_do - zapamatovat si cas posledniho behu, dat now()-ta hodnota a vyjde jak dlouho trvala posledni operace
-    db.execute("INSERT INTO log_table (action, description, severity) VALUES (%s,%s,%s)",
-               (action, description, severity))
+    db.execute("INSERT INTO log_table (action, description, severity, script) VALUES (%s,%s,%s,%s)",
+               (action, description, severity, filename))
     db_connection.commit()
     print(action + "----" + description + "----severity " + str(severity) + "")
 
 def log_start(filename):
-    log("start", "instance " + filename + " started", 5)
+    log("start", "instance " + filename + " started", 5, filename)
+    update_semaphore(filename, "running")
 
 def log_end(filename, time_elapsed):
-    log('end', "instance " + filename + " finished in "+str(time_elapsed)+" seconds.", 5)
+    log('end', "instance " + filename + " finished in "+str(time_elapsed)+" seconds.", 5, filename)
+    update_semaphore(filename, "idle")
 
 def do_morph(word):
     morph.tags = False
@@ -34,21 +100,62 @@ def do_morph(word):
         return(lemm[0]['lemma'])
 
 def delete_tables():
-    log("delete", "table deletions started", 0)
+    log("delete", "table deletions started", 0, "tbd")
     db.execute("DELETE from words")
     db.execute("DELETE from stems")
     db.execute("DELETE from lemms")
     db_connection.commit()
-    log("delete", "table deletions finished", 0)
+    log("delete", "table deletions finished", 0, "tbd")
 
 def clear_data():
-    log("clearing", "table clearing started", 0)
+    log("clearing", "table clearing started", 0, "tbd")
     db.execute("UPDATE magazine SET status='new' where status='lemm'")
     db.execute("UPDATE words SET count=0")
     db.execute("UPDATE lemms SET count=0")
     db.execute("UPDATE stems SET count=0")
     db_connection.commit()
-    log("clearing", "table clearing finished", 0)
+    log("clearing", "table clearing finished", 0, "tbd")
+
+def what_is_my_priority(script_name):
+    db.execute("SELECT priority from semaphore WHERE script_name = '"+script_name+"'")
+    results = db.fetchall()
+#todo osetrit pripad, kdy se nic nenalezne
+    return results[0][0]
+
+def update_semaphore(script_name, status):
+    db.execute("UPDATE semaphore SET status=%s where script_name=%s", (status, script_name))
+    db_connection.commit()
+
+
+def is_more_prio_process_running_private(priority):
+    db.execute("SELECT * from semaphore WHERE priority <= "+str(priority)+" AND status = 'running'")
+    results = db.fetchall()
+    print (results)
+    if len(results)>1: #since current proces is always included, because of SQL Where condition <=, we are evaluating more than one
+        log("sleep", "going to sleep, another process is running", 5, "tbd")
+        time.sleep(5)
+        log("sleep", "woken up, continue with work", 5, "tbd")
+        return True
+    else:
+        return False
+
+
+def is_more_prio_process_running(script_name, priority):
+    finish = True
+    i=0
+    while (finish==True):
+        finish=is_more_prio_process_running_private(priority)
+        i=i+1
+        if i==10:
+            log("exit", "another process with higher prio is running for long time", 9, script_name)
+            log_end(script_name,0)
+            #update_semaphore(script_name, "idle")
+            exit()
+        print(i)
+
+
+
+
 
 def update_progress(progress, message):
     # update_progress() : Displays or updates a console progress bar
@@ -72,11 +179,12 @@ def update_progress(progress, message):
     block = int(round(barLength * progress))
     # format("{:.2%}".progress*100
     progr = ("{:.2f}".format(progress * 100))
-    text = "\rPercent: [{0}] {1}% {2}".format("#" * block + "-" * (barLength - block), progr, status + msg)
+    text = "\rPercent: [{0}] {1}% {2}".format("#" * block + "-" * (barLength - block), progr, status)
     sys.stdout.write(text+message)
     sys.stdout.flush()
 
 def cz_stem(word, aggressive=False):
+    #https: // github.com / UFAL - DSG / alex / blob / master / alex / utils / czech_stemmer.py
     if not re.match("^\\w+$", word):
         return word
     if not word.islower() and not word.istitle() and not word.isupper():

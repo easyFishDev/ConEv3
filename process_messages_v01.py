@@ -4,7 +4,7 @@ from typing import Any, Union
 import feedparser
 import psycopg2
 import configparser
-from ConEv_utils_v01 import log, log_start, log_end
+from ConEv_utils_v01 import log, log_start, log_end, what_is_my_priority, is_more_prio_process_running
 import get_content_v01
 import time
 import os
@@ -86,11 +86,11 @@ def read_article_feed(source, source_name):
             if cnt>0:sev=1
             else: sev=0
 
-        log('entries', source_name + ' has ' + str(len(feed['entries'])) + ' found, ' + str(cnt) + ' inserted', sev)
+        log('entries', source_name + ' has ' + str(len(feed['entries'])) + ' found, ' + str(cnt) + ' inserted', sev, os.path.basename(__file__))
         cnt = 0
 
     except Exception as e:
-        log('error'+" "+repr(e), source, 9)
+        log('error'+" "+repr(e), source, 9, os.path.basename(__file__))
         #print(repr(e))
         #print(str(e))
 
@@ -108,10 +108,14 @@ if __name__ == '__main__':
     log_start(os.path.basename(__file__))
     #log("start", "instance "+os.path.basename(__file__)+" started", 0)
     start = time.time()
+
+    my_prio = what_is_my_priority(os.path.basename(__file__))
+    canIrun = is_more_prio_process_running(os.path.basename(__file__), my_prio)
+
     process_RSS()
 
     stop = time.time()
     elapsed = (stop - start)
-    log("progress", "processed " +  ", inserted " + ", in " + str(elapsed) + " seconds",0)
+    log("progress", "processed " +  ", inserted " + ", in " + str(elapsed) + " seconds",0, os.path.basename(__file__))
     log_end(os.path.basename(__file__),elapsed)
     db_connection.close()
