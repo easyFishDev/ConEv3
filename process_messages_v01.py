@@ -3,6 +3,7 @@ from typing import Any, Union
 
 import feedparser
 import psycopg2
+import mysql.connector
 import configparser
 from ConEv_utils_v01 import log, log_start, log_end, what_is_my_priority, is_more_prio_process_running
 import get_content_v01
@@ -24,6 +25,9 @@ config.read('config.ini')
 
 # db_connection = psycopg2.connect("dbname=config['postgreSQL']['db'] user=config['postgreSQL']['user'] password=config['postgreSQL']['pass'] host='127.0.0.1'")
 db_connection = psycopg2.connect("dbname=ConEv user=postgres password=forward host=127.0.0.1")
+#db_connection = mysql.connector.connect(user='root', password='global99-News',
+#                              host='127.0.0.1',
+#                              database='ConEv')
 # host=config['postgreSQL']['host']")
 
 db = db_connection.cursor()
@@ -48,20 +52,20 @@ def article_is_not_db(article_title, article_date):
         return False
 
 
-def add_article_to_db(article_title, article_date, article_url, source_name, article_text, article_description):
+def add_article_to_db(article_title, article_date, article_url, source_name, article_text, article_description, language):
     """ Add a new article title and date to the database
     Args:
         article_title (str): The title of an article
         article_date (str): The publication date of an article
         :param article_text:
     """
-    db.execute("INSERT INTO magazine (title, date, url, source, article, description) VALUES (%s,%s,%s,%s,%s,%s)",
-               (article_title, article_date, article_url, source_name, article_text, article_description))
+    db.execute("INSERT INTO magazine (title, date, url, source, article, description, language) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+               (article_title, article_date, article_url, source_name, article_text, article_description, language))
 
     db_connection.commit()
 
 
-def read_article_feed(source, source_name):
+def read_article_feed(source, source_name, language):
     """ Get articles from RSS feed """
     try:
         feed = feedparser.parse(source)
@@ -75,7 +79,7 @@ def read_article_feed(source, source_name):
                 #print(article["title"]+" "+source_name)
                 #todo include language into article
                 add_article_to_db(article['title'], article['published'], article['link'], source_name, article_text,
-                              article['description'])
+                              article['description'], language)
                 cnt += 1
 
         # log('saving', source_name + ' has ' + str(cnt) + ' records inserted', 0)
@@ -101,7 +105,7 @@ def process_RSS():
     results = db.fetchall()
     for r in results:
         # log("reading", r[1] + " " + r[3], 0)
-        read_article_feed(r[3], r[1])
+        read_article_feed(r[3], r[1], r[4])
 
 
 if __name__ == '__main__':
