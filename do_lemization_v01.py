@@ -5,7 +5,7 @@ import psycopg2
 import time, sys
 import re
 import os
-import sys
+import pdb
 from ConEv_utils_v01 import log, log_start, log_end, do_morph, delete_tables, clear_data, update_progress, cz_stem, what_is_my_priority, is_more_prio_process_running, find_word_attrs, build_digital_article
 
 # http://ufal.mff.cuni.cz/~zabokrtsky/courses/npfl092/html/nlp-frameworks.html
@@ -29,17 +29,31 @@ msg = ""
 
 def check_dictionary(word, stem, lemm, language):
     pos, gender, animate, singular, negation, plural, degree = find_word_attrs(word, language)
+    #if word=='COVID-19': word='covid-19'
+
+    # //////////////////////////////////////////////
+
+    #db.execute(
+    #    "INSERT INTO dictionary(word, stem, lemm, pos, gender, animate, singular, negation, plural, degree, language) VALUES('COxxID-19', 'COxxID-19', 'COxxID-19', '', '', '', '', '', '', '', 'CZ')")
+    #db_connection.commit()
+    # //////////////////////////////////////////////
+
 
     db.execute("SELECT word, stem, lemm from public.dictionary WHERE word=%s and 1=%s and language=%s", (word, 1, language))
+
     results = db.fetchall()
     if not results:
         db.execute("INSERT INTO dictionary (word, stem, lemm, pos, gender, animate, singular, negation, plural, degree, language ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (word, stem, lemm, pos, gender, animate, singular, negation, plural, degree, language))
         db_connection.commit()
+
     db.execute("SELECT ID from public.dictionary WHERE word=%s and 1=%s and language=%s", (word, 1, language))
-    results = db.fetchall()
-    return results[0]
+    results1 = db.fetchall()
+    if not results1:
+        log("ERROR", "broken DB " + word, 9, "none")
+        return 99999999
 
-
+    else:
+        return results1[0]
 
 def check_word(word, date_inserted, stem, lemm, language):
     #print(cz_stem("Koronavirusy", aggressive))
@@ -135,19 +149,24 @@ words_processed=0
 for r in results:
     # print(len(results))
     # print(r)
+    id=r[4]
     words_extracted = extract_words(r[0] + " " + str(r[1]), r[2].date(),r[3],r[4])
     recordNr += 1
     stop=time.time()
     words_processed = words_extracted + words_processed
     update_progress(recordNr / len(results)," speed: "+str(round(words_processed/(stop-start),2))+" words/second")
 
+    db.execute("UPDATE magazine SET status='lemm' where id ='%s'", (id,))        #logging every processed record
+    db_connection.commit()
+
+
 log("stemming", "processed "+str(len(results))+" magazine records and "+str(words_processed)+" words.",3, os.path.basename(__file__))
 stop = time.time()
 log("stemming","word stemming finished - speed: "+str(words_processed/(stop-start))+" words/second",3, os.path.basename(__file__))
 # change status
-log("status","changing article status form new to lemm - START",2, os.path.basename(__file__))      #todo transfer it to universal function
-db.execute("UPDATE magazine SET status='lemm' where status='new'")
-db_connection.commit()
-log("status","changing article status form new to lemm - END",2, os.path.basename(__file__))
+#log("status","changing article status form new to lemm - START",2, os.path.basename(__file__))      #todo transfer it to universal function
+#db.execute("UPDATE magazine SET status='lemm' where status='new'")
+#db_connection.commit()
+#log("status","changing article status form new to lemm - END",2, os.path.basename(__file__))
 
 log_end(os.path.basename(__file__),stop-start)
